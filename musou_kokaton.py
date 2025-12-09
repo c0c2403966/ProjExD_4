@@ -199,6 +199,42 @@ class Explosion(pg.sprite.Sprite):
         if self.life < 0:
             self.kill()
 
+class Gravity(pg.sprite.Sprite):
+    """
+    重力場に関するクラス
+    画面全体を覆い、範囲内の爆弾を破壊する
+    """
+    def __init__(self, life: int):
+        """
+        重力場Surfaceを生成する
+        引数 life：重力場の持続時間（フレーム数）
+        """
+        super().__init__()
+        
+        # 手順１：空のSurfaceインスタンスを生成する (画面全体)
+        self.image = pg.Surface((WIDTH, HEIGHT))
+        
+        # 手順２：上記Surfaceにrectをdrawする (画面全体を黒で塗りつぶす)
+        # 描画対象の矩形は、Surface全体(0, 0, WIDTH, HEIGHT)
+        # Rectの引数は (左上x, 左上y, 幅, 高さ)
+        pg.draw.rect(self.image, (0, 0, 0), (0, 0, WIDTH, HEIGHT))  # 黒色 (0, 0, 0)
+        
+        # 手順３：上記Surfaceに透明度を設定する
+        alpha = 150  # 透明度 (0:透明 ～ 255:不透明)
+        self.image.set_alpha(alpha)
+        
+        self.rect = self.image.get_rect()
+        self.rect.topleft = (0, 0)  # 画面左上隅に配置
+        self.life = life
+
+    def update(self):
+        """
+        発動時間を1減算し、0未満になったらkillする
+        """
+        self.life -= 1
+        if self.life < 0:
+            self.kill()
+
 
 class Enemy(pg.sprite.Sprite):
     """
@@ -281,6 +317,7 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    gravitys = pg.sprite.Group()
 
     tmr = 0
     clock = pg.time.Clock()
@@ -294,12 +331,24 @@ def main():
                     beams.add(NeoBeam(bird, num=5).gen_beams())
                 else:
                     beams.add(Beam(bird))
+            if event.type == pg.KEYDOWN and event.key == pg.K_RETURN:
+                # 発動条件: リターンキー押下 and スコアが200より大 and 重力場が発動中でない
+                if score.value >= 200 and len(gravitys) == 0:
+                    gravitys.add(Gravity(400))  # 発動時間400フレームでインスタンス生成
+                    score.value -= 200  # スコアを200消費
+
         screen.blit(bg_img, [0, 0])
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
             emys.add(Enemy())
 
         for emy in emys:
+            if len(gravitys) > 0:# 重力場が発動中の場合のみ判定
+            # 重力場と衝突した爆弾を処理（True, Falseで爆弾のみ削除）
+                for bomb in pg.sprite.groupcollide(bombs, gravitys, True, False).keys(): # 重力場は削除しない(False)
+                    exps.add(Explosion(bomb, 50))  # 爆発エフェクト
+                    score.value += 1 # 打ち落としたので1点アップ
+
             if emy.state == "stop" and tmr%emy.interval == 0:
                 # 敵機が停止状態に入ったら，intervalに応じて爆弾投下
                 bombs.add(Bomb(emy, bird))
@@ -320,7 +369,6 @@ def main():
             time.sleep(2)
             return
 
-        bird.update(key_lst, screen)
         beams.update()
         beams.draw(screen)
         emys.update()
@@ -329,6 +377,9 @@ def main():
         bombs.draw(screen)
         exps.update()
         exps.draw(screen)
+        gravitys.update()
+        gravitys.draw(screen)
+        bird.update(key_lst, screen)
         score.update(screen)
         pg.display.update()
         tmr += 1
@@ -340,3 +391,4 @@ if __name__ == "__main__":
     main()
     pg.quit()
     sys.exit()
+
